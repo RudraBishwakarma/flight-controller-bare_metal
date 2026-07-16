@@ -1,0 +1,67 @@
+# ==========================================
+# BUILD OUTPUTS
+# ==========================================
+build/
+*.o
+*.elf
+*.bin
+*.hex
+*.map
+*.out
+*.exe              # ← Windows executables
+*.dll              # ← Windows DLLs
+*.a                # ← Static libraries
+*.so               # ← Shared libraries
+*.dylib            # ← macOS libraries
+test_pid           # ← Compiled test binaries (no extension on Linux/Mac)
+test_mixer
+test_sbus
+test_mahony
+test_failsafe
+test_scheduler
+test_rate
+test_angle
+test_msp
+flight_controller # ← Main firmware binary
+
+# ==========================================
+# IDE FILES
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ==========================================
+# PYTHON
+# ==========================================
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+.venv/
+venv/
+env/
+
+# ==========================================
+# SIMULATION OUTPUTS
+# ==========================================
+simulation/__pycache__/
+*.log
+flight_data_*.bin
+
+# ==========================================
+# OS FILES
+# ==========================================
+Thumbs.db
+Desktop.ini
+
+# ==========================================
+# DEBUG FILES
+# ==========================================
+*.pdb              # Windows debug symbols
+core               # Core dumps
+core.*
