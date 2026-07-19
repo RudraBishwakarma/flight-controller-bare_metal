@@ -9,6 +9,14 @@
 #define TARGET_STM32F405    0
 
 // ==========================================
+// STANDARD HEADERS
+// ==========================================
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdio.h>
+
+// ==========================================
 // SYSTEM CLOCK CONFIGURATION
 // ==========================================
 
@@ -165,7 +173,6 @@
 
 // Debug print (goes to console in QEMU)
 #if DEBUG_ENABLED
-    #include <stdio.h>
     #define DEBUG_PRINT(level, fmt, ...) \
         do { \
             if (level <= DEBUG_LEVEL) { \
@@ -180,16 +187,14 @@
     #define DEBUG_PRINT(level, fmt, ...)
 #endif
 
-// Simulated time functions (for PC testing)
-#define micros()    simulated_micros()
-#define millis()    simulated_millis()
-
 // ==========================================
 // SIMULATED HARDWARE FUNCTIONS
 // ==========================================
 
 // These are implemented in a simulated_hardware.c file
 // that provides fake sensor data for QEMU testing
+// Note: millis() and micros() are declared in clock_config.h
+//       and implemented in clock_config.c using simulated functions below
 
 #ifdef __cplusplus
 extern "C" {
