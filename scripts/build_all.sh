@@ -64,8 +64,13 @@ FIRMWARE_SOURCES=(
     "firmware/src/utils/circular_buffer.c"
 )
 
+# ==========================================
+# INCLUDE DIRECTORIES
+# ==========================================
+
 INCLUDE_DIRS=(
-    "-Ifirmware/config"
+    "-Ifirmware"
+    "-Ifirmware/src"
     "-Ifirmware/src/system"
     "-Ifirmware/src/hal"
     "-Ifirmware/src/drivers/imu"
@@ -75,7 +80,6 @@ INCLUDE_DIRS=(
     "-Ifirmware/src/failsafe"
     "-Ifirmware/src/utils"
 )
-
 # Compile
 gcc -o ${BUILD_DIR}/flight_controller \
     "${FIRMWARE_SOURCES[@]}" \
