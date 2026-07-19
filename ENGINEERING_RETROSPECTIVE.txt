@@ -1,0 +1,4173 @@
+================================================================================
+BARE-METAL FLIGHT CONTROLLER
+ENGINEERING RETROSPECTIVE
+================================================================================
+
+Author : Rudra Bishwakarma
+
+================================================================================
+PURPOSE OF THIS DOCUMENT
+================================================================================
+
+The objective of this project was not simply to implement a PID controller
+or read IMU data from an STM32 microcontroller.
+
+Instead, the goal was to design a complete bare-metal flight control
+framework capable of demonstrating the software architecture used in
+modern unmanned aerial vehicles (UAVs).
+
+Unlike many educational flight controller projects that focus only on
+sensor interfacing or stabilization algorithms, this project emphasizes
+the complete embedded software stack required to operate a multirotor
+aircraft safely and deterministically.
+
+Throughout development, equal importance was given to
+
+    • Real-time software architecture
+    • Deterministic execution
+    • Modular firmware design
+    • Reliable communication
+    • Safety engineering
+    • Maintainable code structure
+    • Simulation and validation
+
+rather than implementing isolated control algorithms.
+
+Every subsystem was designed as an independent software component that
+communicates through clearly defined interfaces.
+
+This architectural approach allows future expansion while preventing
+tight coupling between unrelated modules.
+
+The engineering decisions documented throughout this report follow a
+consistent structure:
+
+    CONTEXT
+
+    DESIGN DECISION
+
+    ALTERNATIVES CONSIDERED
+
+    WHY THIS DESIGN WAS CHOSEN
+
+    TRADE-OFFS
+
+    ENGINEERING INSIGHT
+
+    INTERVIEW DISCUSSION
+
+The purpose of documenting these decisions is not only to explain how
+the firmware operates, but also to capture the engineering reasoning
+behind the final architecture.
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. Why Build a Flight Controller?
+2. Choosing Bare Metal over RTOS
+3. Overall Flight Controller Architecture
+4. Designing a Layered Software Architecture
+5. Deterministic Scheduling
+6. Hardware Abstraction Layer
+7. Sensor Interface Design
+8. IMU Processing
+9. Attitude Estimation
+10. Flight Control Algorithms
+11. Communication Protocols
+12. Safety Engineering
+13. Simulation and Validation
+14. Software Engineering Decisions
+15. Future Extensions
+16. Engineering Lessons Learned
+
+================================================================================
+1. WHY BUILD A FLIGHT CONTROLLER?
+================================================================================
+
+CONTEXT
+
+Modern drones appear deceptively simple from the outside.
+
+A pilot moves the transmitter sticks, the aircraft responds, and the
+vehicle maintains stable flight even in the presence of disturbances.
+
+Behind this behaviour lies a tightly integrated real-time embedded system
+that continuously performs sensor acquisition, state estimation, control,
+communication, safety monitoring, and actuator output at hundreds or
+thousands of iterations per second.
+
+Most university drone projects focus primarily on assembling hardware or
+using open-source flight stacks such as PX4, ArduPilot, or Betaflight.
+
+Although these platforms provide excellent functionality, they abstract
+away many of the engineering challenges involved in designing reliable
+embedded control software.
+
+Consequently, it becomes difficult to understand
+
+• how sensor data flows through the system,
+
+• why deterministic scheduling is important,
+
+• how controllers interact,
+
+• how communication protocols integrate with control logic,
+
+• and how safety mechanisms are implemented.
+
+The objective of this project was therefore not to build another drone,
+but to understand how a flight controller itself is engineered.
+
+Instead of modifying an existing autopilot, every major subsystem was
+implemented independently using bare-metal C.
+
+The firmware models the complete software pipeline used by a practical
+flight controller.
+
+                    IMU
+
+                     ↓
+
+             Sensor Processing
+
+                     ↓
+
+           Attitude Estimation
+
+                     ↓
+
+          Flight Control Algorithms
+
+                     ↓
+
+              Motor Mixing
+
+                     ↓
+
+             ESC PWM Outputs
+
+Additional subsystems operate alongside the control pipeline.
+
+These include
+
+• SBUS Receiver Interface
+
+• MSP Communication
+
+• Telemetry
+
+• RC Failsafe
+
+• Scheduler
+
+• Hardware Abstraction Layer
+
+Each subsystem performs one clearly defined engineering function while
+remaining independent from the remaining application.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+Rather than building a feature-oriented firmware where application logic
+is directly coupled with hardware drivers, the project was designed as a
+layered embedded software framework.
+
+Every subsystem owns a single responsibility.
+
+Hardware drivers acquire information.
+
+Estimation algorithms compute aircraft state.
+
+Controllers generate actuator commands.
+
+Communication modules exchange external information.
+
+Safety modules continuously supervise system behaviour.
+
+This separation ensures that individual modules can evolve independently
+without requiring large-scale architectural changes.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+Modify an existing open-source flight controller.
+
+Advantages
+
+• Rapid development
+
+• Proven reliability
+
+• Large ecosystem
+
+Disadvantages
+
+• Limited understanding of internal architecture
+
+• Difficult to distinguish original work
+
+• Most engineering decisions already made
+
+------------------------------------------------------------
+
+Alternative 2
+
+Develop a flight controller from first principles.
+
+Advantages
+
+• Complete understanding of every subsystem
+
+• Freedom to design custom architecture
+
+• Strong embedded systems experience
+
+• Demonstrates firmware engineering skills
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+Developing the firmware from first principles provides considerably deeper
+engineering insight than extending an existing autopilot.
+
+Every software component—from SPI drivers to control algorithms—must be
+designed, implemented, tested, and integrated manually.
+
+Although this significantly increases development effort, it also exposes
+the practical engineering challenges encountered in real embedded systems.
+
+The resulting project demonstrates not only knowledge of control theory,
+but also software architecture, hardware abstraction, communication,
+real-time scheduling, modular design, and fault handling.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Complete ownership of software architecture
+
+• Better understanding of embedded firmware
+
+• Highly modular design
+
+• Easier experimentation
+
+• Strong interview discussion value
+
+Disadvantages
+
+• Longer development time
+
+• Increased debugging complexity
+
+• More implementation effort
+
+• Requires validation of every subsystem
+
+The educational and engineering benefits greatly outweigh the additional
+development effort.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+One of the earliest realizations during development was that flight
+controllers are fundamentally software architecture problems rather than
+control algorithm problems.
+
+PID controllers occupy only a small portion of the total firmware.
+
+Much greater engineering effort is spent designing deterministic
+execution, reliable communication, modular interfaces, safety mechanisms,
+and maintainable software organization.
+
+Understanding these interactions ultimately became more valuable than
+implementing any individual algorithm.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+A common interview question is
+
+"Why build your own flight controller instead of using PX4 or ArduPilot?"
+
+A strong engineering answer is
+
+"Existing flight stacks demonstrate how to operate a drone, but building
+the firmware from scratch demonstrates how those systems are architected.
+Implementing each subsystem independently provided a deeper understanding
+of embedded software design, deterministic scheduling, communication,
+sensor fusion, control systems, and safety engineering than modifying an
+existing codebase."================================================================================
+2. CHOOSING BARE METAL OVER RTOS
+================================================================================
+
+CONTEXT
+
+One of the earliest architectural decisions involved selecting the overall
+software execution model.
+
+Modern embedded systems frequently employ a Real-Time Operating System
+(RTOS) such as FreeRTOS or Zephyr to schedule multiple concurrent tasks.
+
+An RTOS provides services including
+
+• Task Scheduling
+
+• Context Switching
+
+• Inter-task Communication
+
+• Synchronization
+
+• Memory Management
+
+These features simplify application development for large embedded
+projects.
+
+However, flight controllers have extremely strict timing requirements.
+
+The control loop often executes at frequencies between 500 Hz and
+2 kHz, leaving only a few hundred microseconds for all computation.
+
+The project therefore required careful consideration of whether an RTOS
+would genuinely improve the software architecture or simply introduce
+unnecessary complexity.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+The firmware was implemented entirely using a bare-metal architecture.
+
+Instead of relying on an operating system, the application executes under
+a deterministic cooperative scheduler responsible for invoking every
+software subsystem at predefined intervals.
+
+The scheduler directly controls
+
+• IMU Sampling
+
+• Sensor Fusion
+
+• Flight Controllers
+
+• RC Processing
+
+• Telemetry
+
+• Failsafe Monitoring
+
+Every task executes in a predictable order without dynamic scheduling or
+context switching.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+FreeRTOS
+
+Advantages
+
+• Built-in scheduler
+
+• Task priorities
+
+• Queues and semaphores
+
+• Widely used in industry
+
+Disadvantages
+
+• Context-switch overhead
+
+• Increased debugging complexity
+
+• Additional memory usage
+
+• More abstraction between hardware and application
+
+------------------------------------------------------------
+
+Alternative 2
+
+Bare-Metal Cooperative Scheduler
+
+Advantages
+
+• Fully deterministic execution
+
+• Minimal overhead
+
+• Complete timing control
+
+• Simple debugging
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+The primary objective of this project was understanding how flight
+controller firmware operates internally.
+
+Implementing an RTOS would have delegated task scheduling to the operating
+system, reducing visibility into one of the most important engineering
+problems in embedded software.
+
+By implementing a custom scheduler, every task execution order remains
+explicit.
+
+The firmware therefore demonstrates
+
+• deterministic scheduling,
+
+• execution timing,
+
+• task prioritization,
+
+• and real-time software organization
+
+without relying on external operating system services.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Lower latency
+
+• Minimal RAM usage
+
+• Complete execution transparency
+
+• Easier timing analysis
+
+• Better educational value
+
+Disadvantages
+
+• No preemption
+
+• Manual scheduling required
+
+• Less suitable for large applications
+
+For a flight controller of this scale, deterministic execution was more
+important than RTOS features.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+Bare-metal programming does not necessarily mean writing software inside
+a single infinite loop.
+
+Professional bare-metal firmware often implements sophisticated scheduling
+systems specifically designed around application timing requirements.
+
+The absence of an RTOS therefore does not imply the absence of software
+architecture.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"Why didn't you simply use FreeRTOS?"
+
+Answer
+
+"The objective was to understand deterministic firmware design rather than
+operating system APIs. A custom scheduler provides complete control over
+execution timing while minimizing latency and memory overhead. For this
+application, the additional complexity of an RTOS offered limited
+practical benefit."
+
+================================================================================
+3. OVERALL FLIGHT CONTROLLER ARCHITECTURE
+================================================================================
+
+CONTEXT
+
+As additional features were introduced—including sensor fusion, receiver
+processing, telemetry, communication protocols, and safety monitoring—the
+initial single-file prototype became increasingly difficult to extend.
+
+Many modules directly depended on one another.
+
+Small modifications frequently required changes across multiple source
+files.
+
+Debugging also became progressively more complicated because unrelated
+subsystems executed inside the same control flow.
+
+A more structured software architecture became necessary.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+The firmware was reorganized into a layered architecture where each layer
+owns one specific engineering responsibility.
+
+                    Application
+
+                         │
+
+        ┌────────────────────────────────┐
+
+        │ Flight Controllers             │
+        │ Failsafe                       │
+        │ Telemetry                      │
+
+        └────────────────────────────────┘
+
+                         │
+
+        ┌────────────────────────────────┐
+
+        │ Sensor Fusion                  │
+        │ IMU Processing                 │
+        │ RC Processing                  │
+
+        └────────────────────────────────┘
+
+                         │
+
+        ┌────────────────────────────────┐
+
+        │ Device Drivers                 │
+        │ SPI                            │
+        │ UART                           │
+        │ Timers                         │
+
+        └────────────────────────────────┘
+
+                         │
+
+                  STM32 Hardware
+
+Each layer communicates only with its neighbouring layer.
+
+Higher-level modules never manipulate hardware directly.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+Monolithic Firmware
+
+Advantages
+
+• Fast initial development
+
+Disadvantages
+
+• Difficult maintenance
+
+• Tight coupling
+
+• Poor scalability
+
+------------------------------------------------------------
+
+Alternative 2
+
+Layered Architecture
+
+Advantages
+
+• Modular
+
+• Readable
+
+• Scalable
+
+• Easier testing
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+A layered architecture isolates responsibilities.
+
+The PID controller does not need to understand SPI communication.
+
+The IMU driver does not know how motors are mixed.
+
+The scheduler simply invokes tasks without understanding controller
+internals.
+
+This separation reduces software coupling while making future development
+significantly easier.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Easier debugging
+
+• Cleaner interfaces
+
+• Better scalability
+
+• Improved maintainability
+
+Disadvantages
+
+• More source files
+
+• Additional abstraction
+
+The increased organization far outweighs the small increase in project
+structure.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+Large embedded software projects become difficult to maintain not because
+algorithms become complicated, but because module dependencies become
+unmanageable.
+
+Software architecture is therefore just as important as algorithm design.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"Why did you use a layered architecture?"
+
+Answer
+
+"Each layer solves one engineering problem. Hardware drivers manage
+peripherals, estimation modules compute aircraft state, controllers
+generate commands, and safety modules supervise the entire system. This
+reduces coupling and allows each subsystem to evolve independently."
+
+================================================================================
+4. DESIGNING THE HARDWARE ABSTRACTION LAYER
+================================================================================
+
+CONTEXT
+
+The earliest firmware prototypes accessed STM32 peripheral registers
+directly from multiple application modules.
+
+For example,
+
+the IMU driver configured SPI,
+
+telemetry configured UART,
+
+motor control configured timers,
+
+and application logic occasionally manipulated peripheral registers
+directly.
+
+Although functional, this approach quickly became difficult to maintain.
+
+Changing hardware configuration often required modifications across
+multiple unrelated files.
+
+The firmware gradually became tightly coupled to one specific STM32
+configuration.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+A dedicated Hardware Abstraction Layer (HAL) was introduced between the
+application software and STM32 peripherals.
+
+Instead of directly accessing hardware registers, every subsystem
+communicates through standardized interfaces.
+
+Example
+
+Application
+
+↓
+
+imu_read()
+
+↓
+
+SPI Driver
+
+↓
+
+STM32 SPI Peripheral
+
+Application code never directly manipulates peripheral registers.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+Direct Register Access Everywhere
+
+Advantages
+
+• Minimal abstraction
+
+• Slightly fewer function calls
+
+Disadvantages
+
+• Tight hardware coupling
+
+• Difficult maintenance
+
+• Poor portability
+
+------------------------------------------------------------
+
+Alternative 2
+
+Hardware Abstraction Layer
+
+Advantages
+
+• Modular drivers
+
+• Clear interfaces
+
+• Easier testing
+
+• Improved portability
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+Separating hardware-specific code from application logic dramatically
+improves software organization.
+
+The flight controller becomes responsible only for flight control.
+
+The HAL becomes responsible only for communicating with hardware.
+
+This separation makes debugging considerably easier because hardware
+issues and application issues can be investigated independently.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Cleaner code
+
+• Better modularity
+
+• Easier future hardware migration
+
+• Simplified driver development
+
+Disadvantages
+
+• Slightly larger codebase
+
+• Small function-call overhead
+
+The abstraction overhead is negligible compared with the maintainability
+benefits gained.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+Hardware abstraction is not intended to hide hardware.
+
+Its purpose is to isolate hardware-specific implementation details so
+that application software remains focused on solving engineering problems
+rather than peripheral configuration.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"What advantage does a HAL provide in embedded firmware?"
+
+Answer
+
+"It separates hardware access from application logic. Drivers become
+responsible for peripheral communication, while higher-level software
+remains independent of register-level implementation details. This
+improves maintainability, portability, and debugging efficiency."
+
+================================================================================
+5. DESIGNING THE DETERMINISTIC SCHEDULER
+================================================================================
+
+CONTEXT
+
+After the software architecture was divided into independent modules,
+another challenge quickly became apparent.
+
+Every subsystem operated at a different desired frequency.
+
+For example,
+
+• The IMU should be sampled at high frequency.
+
+• The attitude estimator should execute immediately after new sensor data
+  becomes available.
+
+• The PID controller must run at a fixed rate.
+
+• Receiver packets arrive asynchronously.
+
+• Telemetry only needs periodic updates.
+
+Initially every subsystem executed sequentially inside one infinite loop.
+
+```
+while (1)
+{
+    imu_update();
+
+    attitude_update();
+
+    pid_update();
+
+    mixer_update();
+
+    telemetry_update();
+
+    failsafe_update();
+}
+```
+
+Although this implementation appeared simple, it introduced several
+engineering problems.
+
+As more features were added, the loop execution time continuously changed.
+
+Adding debugging messages delayed controller execution.
+
+Communication processing occasionally delayed sensor sampling.
+
+Different control loops no longer executed at constant intervals.
+
+For a real-time control system, this behaviour is unacceptable because the
+controller assumes a fixed sampling period.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+A deterministic cooperative scheduler was implemented.
+
+Instead of executing every subsystem continuously, each task executes only
+when its scheduled update interval expires.
+
+Conceptually,
+
+```
+Current Time
+
+↓
+
+Scheduler
+
+↓
+
+Task Due?
+
+↓
+
+Execute Task
+
+↓
+
+Return
+```
+
+Each task owns an independent execution period.
+
+Example
+
+| Task | Frequency |
+|------|-----------|
+| IMU Update | 1000 Hz |
+| Attitude Filter | 1000 Hz |
+| PID Controller | 500 Hz |
+| SBUS Processing | 100 Hz |
+| Telemetry | 20 Hz |
+| Failsafe | 100 Hz |
+
+This guarantees that every subsystem executes at a predictable frequency
+regardless of how many additional modules are introduced.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+Sequential Infinite Loop
+
+Advantages
+
+• Very simple
+
+• Minimal code
+
+Disadvantages
+
+• Timing continuously changes
+
+• Difficult scalability
+
+• Controller frequency not guaranteed
+
+------------------------------------------------------------
+
+Alternative 2
+
+Hardware Timer Interrupts For Everything
+
+Advantages
+
+• Precise timing
+
+Disadvantages
+
+• Difficult debugging
+
+• Increased interrupt complexity
+
+• Shared data synchronization required
+
+------------------------------------------------------------
+
+Alternative 3
+
+Deterministic Cooperative Scheduler
+
+Advantages
+
+• Predictable execution
+
+• Simple implementation
+
+• Easy debugging
+
+• Scalable
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+The scheduler provides deterministic behaviour without introducing the
+complexity of a preemptive operating system.
+
+Every task executes in a known order.
+
+Execution latency becomes measurable.
+
+Controller timing remains nearly constant.
+
+Future tasks can be added simply by registering another periodic update
+without modifying the remainder of the firmware.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Deterministic timing
+
+• Minimal overhead
+
+• Easy profiling
+
+• Excellent scalability
+
+• Straightforward debugging
+
+Disadvantages
+
+• Long-running tasks delay subsequent tasks
+
+• No automatic prioritization
+
+• Requires careful task design
+
+These limitations are acceptable because every task is intentionally kept
+small and non-blocking.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+A scheduler is not merely a mechanism for executing code.
+
+It defines how time itself is managed inside an embedded system.
+
+The quality of the scheduler directly influences controller stability,
+sensor consistency, and overall firmware reliability.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"Why not simply call every function inside while(1)?"
+
+Answer
+
+"As the firmware grows, loop execution time continuously changes. Since
+PID controllers assume a fixed sampling interval, varying execution timing
+directly affects control performance. A deterministic scheduler ensures
+every task executes at a predictable frequency."
+
+================================================================================
+6. SENSOR DRIVER DESIGN (MPU6000)
+================================================================================
+
+CONTEXT
+
+The Inertial Measurement Unit (IMU) is the primary sensing device of a
+multirotor flight controller.
+
+Without accurate measurements of angular velocity and acceleration, the
+controller cannot determine aircraft orientation or respond correctly to
+pilot commands.
+
+The selected IMU therefore becomes one of the most critical hardware
+components in the system.
+
+The project required a sensor that
+
+• supports high sampling rates,
+
+• provides low latency,
+
+• offers stable measurements,
+
+• and interfaces efficiently with the STM32.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+The MPU6000 was selected as the primary inertial sensor.
+
+Communication is performed using the SPI peripheral operating in full
+duplex mode.
+
+The driver performs
+
+• Device initialization
+
+• Register configuration
+
+• Burst data acquisition
+
+• Sensor scaling
+
+• Basic calibration
+
+The application never accesses sensor registers directly.
+
+Instead, all communication occurs through the IMU driver interface.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+MPU6050 (I²C)
+
+Advantages
+
+• Low pin count
+
+• Simple wiring
+
+Disadvantages
+
+• Slower communication
+
+• Less reliable at high update rates
+
+------------------------------------------------------------
+
+Alternative 2
+
+MPU6000 (SPI)
+
+Advantages
+
+• Higher bandwidth
+
+• Lower latency
+
+• Better suited for flight controllers
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+Professional flight controllers commonly communicate with inertial sensors
+over SPI because it provides significantly higher throughput than I²C.
+
+Higher communication bandwidth allows the controller to sample sensors at
+higher frequencies while reducing communication latency.
+
+This improves estimation accuracy and overall control responsiveness.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Fast communication
+
+• High reliability
+
+• Lower latency
+
+• Industry-proven solution
+
+Disadvantages
+
+• Additional chip-select signal
+
+• Slightly increased PCB routing complexity
+
+For flight-control applications, communication speed is considerably more
+important than minimizing wiring complexity.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+Selecting a sensor involves more than comparing measurement accuracy.
+
+Interface bandwidth, communication latency, software complexity, and
+system integration are equally important engineering considerations.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"Why did you choose SPI instead of I²C for the IMU?"
+
+Answer
+
+"SPI offers significantly higher bandwidth and deterministic full-duplex
+communication. Since flight controllers continuously sample inertial
+sensors at high frequencies, minimizing communication latency directly
+improves estimation quality and controller responsiveness."
+
+================================================================================
+7. WHY BURST SPI TRANSFERS?
+================================================================================
+
+CONTEXT
+
+The MPU6000 stores gyroscope and accelerometer measurements across
+multiple consecutive registers.
+
+A naïve implementation could read every register independently.
+
+For example,
+
+Read ACCEL_X
+
+↓
+
+Read ACCEL_Y
+
+↓
+
+Read ACCEL_Z
+
+↓
+
+Read GYRO_X
+
+↓
+
+Read GYRO_Y
+
+↓
+
+Read GYRO_Z
+
+Although this approach is functionally correct, it requires multiple SPI
+transactions and repeated chip-select operations.
+
+Each transaction introduces additional communication overhead.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+The driver performs a single burst read beginning from the first sensor
+register.
+
+One SPI transaction retrieves the complete sensor frame containing
+
+• Accelerometer X
+
+• Accelerometer Y
+
+• Accelerometer Z
+
+• Temperature
+
+• Gyroscope X
+
+• Gyroscope Y
+
+• Gyroscope Z
+
+The received byte stream is then converted into engineering units.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+Individual Register Reads
+
+Advantages
+
+• Easy implementation
+
+Disadvantages
+
+• Higher latency
+
+• Multiple SPI transactions
+
+• Lower efficiency
+
+------------------------------------------------------------
+
+Alternative 2
+
+Burst Read
+
+Advantages
+
+• Single transaction
+
+• Lower latency
+
+• Better synchronization
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+Burst transfers reduce communication overhead while ensuring that every
+sensor measurement originates from the same sampling instant.
+
+This prevents subtle timing inconsistencies between accelerometer and
+gyroscope measurements.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Faster acquisition
+
+• Lower CPU overhead
+
+• Better measurement consistency
+
+Disadvantages
+
+• Slightly more complicated driver implementation
+
+The increased implementation complexity is justified by improved sampling
+performance.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+Embedded performance improvements are often achieved by reducing hardware
+transactions rather than increasing processor speed.
+
+A well-designed driver minimizes communication overhead before attempting
+software optimization.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"Why are burst SPI transfers preferred in IMU drivers?"
+
+Answer
+
+"They reduce communication latency, minimize chip-select toggling, and
+ensure all sensor values belong to the same sampling instant. This
+improves both efficiency and measurement consistency."
+
+================================================================================
+8. SENSOR CALIBRATION STRATEGY
+================================================================================
+
+CONTEXT
+
+Raw IMU measurements cannot be used directly by the flight controller.
+
+Every MEMS inertial sensor contains manufacturing imperfections that
+introduce measurement errors.
+
+These errors include
+
+• Constant Bias
+
+• Scale Error
+
+• Sensor Noise
+
+• Temperature Drift
+
+Even when the aircraft remains perfectly stationary, the gyroscope often
+reports small angular velocities while the accelerometer rarely measures
+exactly one gravitational acceleration.
+
+If these errors are ignored, they accumulate over time and eventually
+cause incorrect attitude estimation.
+
+For example,
+
+a gyroscope bias of only a few degrees per second can produce large
+orientation errors after several seconds of integration.
+
+Accurate sensor calibration therefore becomes a prerequisite for reliable
+flight control.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+The firmware performs startup calibration while the aircraft is stationary.
+
+During initialization,
+
+multiple sensor samples are collected.
+
+The average value of each gyroscope axis is computed.
+
+This average becomes the gyroscope bias.
+
+Future measurements are corrected using
+
+Measured Value
+
+-
+
+Bias
+
+↓
+
+Corrected Measurement
+
+The accelerometer is similarly scaled into engineering units before being
+used by the attitude estimator.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+No Calibration
+
+Advantages
+
+• Simplest implementation
+
+Disadvantages
+
+• Large attitude drift
+
+• Poor controller stability
+
+------------------------------------------------------------
+
+Alternative 2
+
+Startup Bias Calibration
+
+Advantages
+
+• Simple implementation
+
+• Good estimation accuracy
+
+• Low computational cost
+
+Chosen.
+
+------------------------------------------------------------
+
+Alternative 3
+
+Continuous Online Calibration
+
+Advantages
+
+• Handles temperature drift
+
+• Improved long-term accuracy
+
+Disadvantages
+
+• Significantly more complex
+
+• Requires motion detection
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+Startup calibration removes the largest systematic error while keeping the
+firmware relatively simple.
+
+For small flight controllers operating over short flight durations,
+startup bias estimation provides excellent performance without requiring
+continuous recalibration.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Simple
+
+• Fast
+
+• Reliable
+
+• Minimal CPU overhead
+
+Disadvantages
+
+• Requires aircraft to remain stationary during startup
+
+• Cannot compensate for temperature-induced drift
+
+For the current firmware architecture, startup calibration provides the
+best balance between simplicity and accuracy.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+Many estimation problems originate from poor sensor calibration rather than
+incorrect algorithms.
+
+Even sophisticated filters cannot compensate for biased measurements if
+the underlying sensor data is fundamentally incorrect.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"Why must the IMU remain stationary during startup?"
+
+Answer
+
+"The firmware estimates gyroscope bias by averaging stationary
+measurements. If the aircraft moves during calibration, actual angular
+motion becomes part of the estimated bias, producing incorrect attitude
+estimation throughout the flight."
+
+================================================================================
+9. ATTITUDE REPRESENTATION
+================================================================================
+
+CONTEXT
+
+The flight controller continuously estimates aircraft orientation.
+
+Several mathematical representations exist for describing orientation.
+
+Common approaches include
+
+• Euler Angles
+
+• Rotation Matrices
+
+• Quaternions
+
+Each representation provides different advantages depending on the
+application.
+
+The project therefore required selecting an internal representation that
+balanced computational efficiency with implementation complexity.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+The firmware internally estimates aircraft attitude using the Mahony
+filter while exposing orientation as
+
+• Roll
+
+• Pitch
+
+• Yaw
+
+These Euler angles are used by the controller because they are intuitive,
+easy to visualize, and directly correspond to aircraft motion.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+Euler Angles
+
+Advantages
+
+• Easy visualization
+
+• Intuitive controller design
+
+• Simple debugging
+
+Disadvantages
+
+• Gimbal lock
+
+------------------------------------------------------------
+
+Alternative 2
+
+Quaternions
+
+Advantages
+
+• No gimbal lock
+
+• Smooth rotations
+
+• Preferred for estimation
+
+Disadvantages
+
+• More difficult to understand
+
+• Harder to debug manually
+
+Chosen internally for estimation,
+converted to Euler angles for controller output.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+The Mahony filter naturally operates using quaternion mathematics because
+they avoid singularities and provide stable numerical integration.
+
+However,
+
+most flight controllers,
+
+telemetry displays,
+
+and PID controllers
+
+operate more naturally using roll, pitch, and yaw.
+
+The firmware therefore combines the strengths of both approaches by
+performing estimation internally while exposing Euler angles externally.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Numerically stable estimation
+
+• Human-readable output
+
+• Easier controller tuning
+
+Disadvantages
+
+• Requires quaternion-to-Euler conversion
+
+• Euler representation still contains singularities
+
+Since quadcopters rarely operate near ±90° pitch during normal flight,
+Euler output remains entirely practical.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+Engineering often involves selecting different mathematical
+representations for different stages of computation.
+
+The representation that is easiest for humans is not always the most
+efficient for numerical algorithms.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"Why are quaternions preferred for sensor fusion?"
+
+Answer
+
+"Quaternions avoid gimbal lock and provide numerically stable rotation
+integration. They are therefore well suited for continuous orientation
+estimation, while Euler angles are better suited for visualization and
+controller interpretation."
+
+================================================================================
+10. WHY CHOOSE THE MAHONY FILTER?
+================================================================================
+
+CONTEXT
+
+Estimating aircraft orientation requires combining information from
+multiple sensors.
+
+The gyroscope provides smooth angular velocity measurements but suffers
+from cumulative drift.
+
+The accelerometer provides an absolute gravity reference but is highly
+susceptible to vibration and linear acceleration.
+
+Neither sensor alone is sufficient.
+
+A sensor fusion algorithm is therefore required.
+
+Several filtering techniques are commonly used in embedded flight
+controllers.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+The firmware implements the Mahony Attitude Filter.
+
+The filter continuously integrates gyroscope measurements while using the
+accelerometer to correct long-term orientation drift.
+
+The resulting estimate provides smooth attitude information suitable for
+closed-loop flight control.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+Complementary Filter
+
+Advantages
+
+• Extremely simple
+
+• Very low CPU usage
+
+Disadvantages
+
+• Lower estimation accuracy
+
+• Limited flexibility
+
+------------------------------------------------------------
+
+Alternative 2
+
+Extended Kalman Filter
+
+Advantages
+
+• Excellent estimation accuracy
+
+• Multi-sensor capability
+
+Disadvantages
+
+• High computational cost
+
+• Complex implementation
+
+------------------------------------------------------------
+
+Alternative 3
+
+Mahony Filter
+
+Advantages
+
+• Excellent accuracy
+
+• Low computational cost
+
+• Proven in embedded flight controllers
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+The Mahony filter provides an excellent compromise between computational
+efficiency and estimation quality.
+
+It executes comfortably on an STM32F405 while producing sufficiently
+accurate attitude estimates for multirotor stabilization.
+
+Its implementation complexity also remains significantly lower than an
+Extended Kalman Filter, making it well suited for a bare-metal firmware
+project.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Fast execution
+
+• Good stability
+
+• Low memory usage
+
+• Mature algorithm
+
+Disadvantages
+
+• Requires gain tuning
+
+• Less flexible than EKF for additional sensors
+
+The simplicity and efficiency of the Mahony filter make it an ideal choice
+for this project's architecture.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+Choosing the most mathematically sophisticated algorithm is not always the
+best engineering decision.
+
+The optimal solution is often the simplest algorithm that satisfies the
+performance requirements while remaining computationally efficient.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"Why didn't you implement an Extended Kalman Filter?"
+
+Answer
+
+"The project focuses on attitude stabilization using an IMU. The Mahony
+filter provides excellent estimation accuracy with significantly lower CPU
+and memory requirements than an EKF. For this application, the additional
+complexity of an EKF would provide little practical benefit."
+
+================================================================================
+11. DESIGNING THE CASCADED FLIGHT CONTROLLER
+================================================================================
+
+CONTEXT
+
+Once reliable attitude estimation was available, the next engineering
+challenge was converting pilot commands into stable motor outputs.
+
+At first glance, it appeared sufficient to compare the desired aircraft
+angle with the measured angle and apply a single PID controller.
+
+However, practical multirotor control systems operate much faster than
+human pilots can react.
+
+The controller must simultaneously
+
+• Maintain aircraft stability
+
+• Reject external disturbances
+
+• Respond quickly to pilot commands
+
+• Produce smooth motor outputs
+
+A single PID controller performing all of these tasks quickly became
+difficult to tune.
+
+Large proportional gains produced oscillations.
+
+Small gains produced sluggish response.
+
+Integral correction often introduced overshoot.
+
+This indicated that attitude control should be divided into multiple
+control loops rather than relying on one controller.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+The firmware implements a cascaded control architecture.
+
+Pilot Input
+
+↓
+
+Desired Roll / Pitch Angle
+
+↓
+
+Angle Controller
+
+↓
+
+Desired Angular Rate
+
+↓
+
+Rate Controller
+
+↓
+
+Motor Mixer
+
+↓
+
+ESC Outputs
+
+The outer loop controls aircraft attitude.
+
+The inner loop controls angular velocity.
+
+Each controller therefore solves only one engineering problem.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+Single PID Controller
+
+Advantages
+
+• Simple implementation
+
+• Fewer calculations
+
+Disadvantages
+
+• Difficult tuning
+
+• Slower disturbance rejection
+
+• Limited scalability
+
+------------------------------------------------------------
+
+Alternative 2
+
+Cascaded PID Controllers
+
+Advantages
+
+• Better stability
+
+• Easier tuning
+
+• Faster response
+
+• Industry standard
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+Separating angle control from rate control simplifies controller design.
+
+The outer controller determines how quickly the aircraft should rotate.
+
+The inner controller ensures the aircraft actually achieves that angular
+velocity.
+
+Each controller can therefore be tuned independently.
+
+This architecture closely follows the control strategy used in modern
+flight-control firmware such as PX4, ArduPilot, and Betaflight.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Improved stability
+
+• Better disturbance rejection
+
+• Easier controller tuning
+
+• Greater scalability
+
+Disadvantages
+
+• Slightly increased computational cost
+
+• More controller parameters
+
+The additional complexity is negligible compared with the significant
+improvement in flight performance.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+Breaking one complex engineering problem into multiple simpler control
+loops often produces better performance than attempting to solve
+everything with one controller.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"Why use cascaded PID controllers instead of one PID?"
+
+Answer
+
+"A single controller must simultaneously regulate attitude and angular
+velocity, making tuning difficult. Cascading separates these objectives,
+allowing the outer loop to command desired rates while the inner loop
+accurately tracks those rates."
+
+================================================================================
+12. PID CONTROLLER DESIGN
+================================================================================
+
+CONTEXT
+
+The PID controller forms the core of the stabilization system.
+
+Its objective is to continuously minimize the difference between the
+desired state and the measured state.
+
+Although the mathematical equation is relatively simple,
+
+Output = P + I + D
+
+practical implementation requires careful engineering consideration.
+
+Poor gain selection can easily destabilize the aircraft even when the
+underlying control algorithm is mathematically correct.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+Each controller implements the three classical PID terms.
+
+Proportional (P)
+
+Produces an immediate response proportional to the current error.
+
+Integral (I)
+
+Accumulates past errors to eliminate steady-state offsets.
+
+Derivative (D)
+
+Predicts future behaviour by measuring how rapidly the error changes.
+
+The final controller output is
+
+Controller Output
+
+=
+
+P
+
++
+
+I
+
++
+
+D
+
+before being passed to the motor mixer.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+Proportional Only
+
+Advantages
+
+• Extremely simple
+
+• Fast execution
+
+Disadvantages
+
+• Cannot eliminate steady-state error
+
+------------------------------------------------------------
+
+Alternative 2
+
+PI Controller
+
+Advantages
+
+• Removes steady-state error
+
+Disadvantages
+
+• Slower response
+
+• Greater overshoot
+
+------------------------------------------------------------
+
+Alternative 3
+
+Full PID Controller
+
+Advantages
+
+• Fast response
+
+• Stable behaviour
+
+• Eliminates steady-state error
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+A full PID controller provides the best compromise between responsiveness
+and stability.
+
+The proportional term produces immediate correction.
+
+The integral term compensates for long-term offsets.
+
+The derivative term damps rapid changes and reduces oscillation.
+
+Together these components produce stable aircraft behaviour across a wide
+range of operating conditions.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Excellent control quality
+
+• Mature algorithm
+
+• Widely understood
+
+• Efficient implementation
+
+Disadvantages
+
+• Requires careful tuning
+
+• Sensitive to noisy measurements
+
+Proper filtering and gain tuning minimize these disadvantages.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+The effectiveness of a PID controller depends far more on tuning than on
+its mathematical equation.
+
+Many unstable systems result from poor parameter selection rather than an
+incorrect controller implementation.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"Which PID term is most sensitive to sensor noise?"
+
+Answer
+
+"The derivative term because it measures the rate of change of error.
+High-frequency sensor noise appears as rapid error variation, making the
+derivative output particularly sensitive unless appropriate filtering is
+used."
+
+================================================================================
+13. INTEGRAL WINDUP PROTECTION
+================================================================================
+
+CONTEXT
+
+During controller testing, one recurring problem became apparent.
+
+When the aircraft experienced a large sustained error—for example while
+the motors were disarmed or output limits were reached—the integral term
+continued accumulating error.
+
+Eventually the integral component became extremely large.
+
+Once the controller regained authority, the accumulated integral caused
+
+• Large overshoot
+
+• Slow recovery
+
+• Oscillations
+
+This phenomenon is commonly known as integral windup.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+The firmware implements integral clamping.
+
+The accumulated integral value is constrained within predefined limits.
+
+Example
+
+If
+
+Integral > Maximum
+
+↓
+
+Integral = Maximum
+
+Likewise,
+
+If
+
+Integral < Minimum
+
+↓
+
+Integral = Minimum
+
+This prevents unlimited growth of the integral term.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+Unlimited Integral
+
+Advantages
+
+• Simplest implementation
+
+Disadvantages
+
+• Severe overshoot
+
+• Slow recovery
+
+------------------------------------------------------------
+
+Alternative 2
+
+Integral Clamping
+
+Advantages
+
+• Stable controller
+
+• Prevents windup
+
+• Easy implementation
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+Integral clamping provides an effective and computationally inexpensive
+solution to windup.
+
+It preserves the benefits of integral correction while preventing the
+controller from accumulating unrealistic correction values.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Improved stability
+
+• Faster recovery
+
+• Minimal CPU overhead
+
+Disadvantages
+
+• Clamp values require tuning
+
+Despite requiring appropriate limits, integral clamping significantly
+improves controller robustness.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+Protective mechanisms are often just as important as the primary control
+algorithm itself.
+
+A mathematically correct controller may still behave poorly if practical
+limitations such as actuator saturation are ignored.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"What is integral windup and how did you prevent it?"
+
+Answer
+
+"Integral windup occurs when the controller continues accumulating error
+while actuator output is saturated. I implemented integral clamping to
+limit the accumulated error, preventing excessive overshoot and improving
+controller recovery."
+
+================================================================================
+14. MOTOR MIXER DESIGN
+================================================================================
+
+CONTEXT
+
+The PID controller generates correction values representing desired
+aircraft motion.
+
+However,
+
+motors cannot directly interpret commands such as
+
+'Increase roll'
+
+or
+
+'Reduce yaw.'
+
+Each motor contributes simultaneously to
+
+• Throttle
+
+• Roll
+
+• Pitch
+
+• Yaw
+
+The controller therefore requires an intermediate stage capable of
+translating control corrections into individual motor commands.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+The firmware implements a Quad-X motor mixer.
+
+The mixer combines
+
+Throttle
+
++
+
+Roll Correction
+
++
+
+Pitch Correction
+
++
+
+Yaw Correction
+
+to compute PWM commands for each motor.
+
+Each motor receives a unique combination depending on its physical
+location and rotation direction.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+Direct Motor Commands
+
+Advantages
+
+• Simple concept
+
+Disadvantages
+
+• Impossible for multirotors
+
+------------------------------------------------------------
+
+Alternative 2
+
+Motor Mixing Matrix
+
+Advantages
+
+• Modular
+
+• Supports different frame types
+
+• Industry standard
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+Representing the mixer as a mathematical mixing matrix separates aircraft
+geometry from controller logic.
+
+The PID controller generates generic roll, pitch, and yaw corrections,
+while the mixer translates those corrections into motor-specific outputs.
+
+Changing from Quad-X to another frame configuration would therefore only
+require modifying the mixer rather than rewriting the control algorithms.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Flexible
+
+• Clean architecture
+
+• Supports future airframe types
+
+Disadvantages
+
+• Slightly more computation
+
+The architectural flexibility greatly outweighs the negligible additional
+computational cost.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+The motor mixer forms the bridge between abstract control theory and the
+physical aircraft.
+
+Controllers compute desired motion.
+
+The mixer converts that motion into individual actuator commands.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"Why separate the motor mixer from the PID controller?"
+
+Answer
+
+"The PID controller should generate aircraft-level control corrections,
+not motor-specific commands. Separating the mixer makes the controller
+independent of airframe geometry and allows different frame
+configurations to be supported by modifying only the mixing matrix."
+
+================================================================================
+15. RECEIVER INPUT USING SBUS
+================================================================================
+
+CONTEXT
+
+A flight controller cannot operate autonomously without receiving pilot
+commands.
+
+The receiver acts as the interface between the radio transmitter and the
+embedded controller by continuously delivering throttle and attitude
+commands.
+
+Initially, standard PWM receiver signals were considered because they are
+easy to understand and simple to interface with.
+
+However, PWM requires one wire for every channel and multiple timer input
+capture peripherals.
+
+As the number of channels increases, hardware complexity grows rapidly.
+
+A more efficient communication protocol was therefore required.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+The firmware implements the SBUS protocol for receiver communication.
+
+SBUS transmits all control channels inside a single serial frame.
+
+The receiver driver performs
+
+• Frame synchronization
+
+• Header verification
+
+• Channel extraction
+
+• Digital switch decoding
+
+• Lost-frame detection
+
+• Failsafe flag processing
+
+The controller receives normalized channel values rather than raw serial
+data.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+PWM Receiver
+
+Advantages
+
+• Simple implementation
+
+• Easy debugging
+
+Disadvantages
+
+• One wire per channel
+
+• High timer usage
+
+• Limited scalability
+
+------------------------------------------------------------
+
+Alternative 2
+
+PPM Receiver
+
+Advantages
+
+• Single wire
+
+• Reduced hardware
+
+Disadvantages
+
+• Sequential decoding
+
+• Higher latency
+
+------------------------------------------------------------
+
+Alternative 3
+
+SBUS Protocol
+
+Advantages
+
+• Single serial interface
+
+• Multiple channels
+
+• Digital communication
+
+• Industry standard
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+SBUS significantly simplifies hardware while increasing functionality.
+
+Using one UART peripheral, the firmware receives sixteen proportional
+channels together with digital switches and receiver status flags.
+
+The protocol is widely adopted in professional RC systems and therefore
+provides realistic experience with embedded communication protocols.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• High channel count
+
+• Low hardware complexity
+
+• Reliable communication
+
+• Efficient UART interface
+
+Disadvantages
+
+• More complicated packet decoding
+
+• Inverted serial signalling on some receivers
+
+The increased software complexity is justified by improved functionality
+and cleaner hardware integration.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+Choosing a communication protocol is rarely about minimizing code.
+
+The objective is selecting an interface that balances hardware
+requirements, bandwidth, latency, and long-term scalability.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"Why did you implement SBUS instead of reading PWM inputs?"
+
+Answer
+
+"SBUS carries up to sixteen channels over a single UART interface,
+reducing hardware complexity while providing faster and more scalable
+communication than individual PWM signals."
+
+================================================================================
+16. IMPLEMENTING THE MSP PROTOCOL
+================================================================================
+
+CONTEXT
+
+As development progressed, observing internal controller variables became
+increasingly important.
+
+Simply printing values over UART quickly became impractical.
+
+Different debugging tools required different message formats.
+
+Future configuration software would also require the ability to request
+specific information from the flight controller.
+
+A structured communication protocol therefore became necessary.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+The firmware implements the MultiWii Serial Protocol (MSP).
+
+Instead of transmitting arbitrary text, all communication occurs through
+structured packets consisting of
+
+Preamble
+
+↓
+
+Direction
+
+↓
+
+Payload Length
+
+↓
+
+Command Identifier
+
+↓
+
+Payload
+
+↓
+
+Checksum
+
+Each command corresponds to one firmware service.
+
+Examples include
+
+• Read IMU Data
+
+• Read Attitude
+
+• Read Receiver Channels
+
+• Read Motor Outputs
+
+• Firmware Information
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+UART printf()
+
+Advantages
+
+• Extremely simple
+
+Disadvantages
+
+• Difficult parsing
+
+• Not machine readable
+
+• Poor scalability
+
+------------------------------------------------------------
+
+Alternative 2
+
+Custom Binary Protocol
+
+Advantages
+
+• Optimized
+
+Disadvantages
+
+• Must design every packet
+
+• Difficult interoperability
+
+------------------------------------------------------------
+
+Alternative 3
+
+MSP
+
+Advantages
+
+• Existing ecosystem
+
+• Lightweight
+
+• Widely supported
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+MSP provides a compact and well-established protocol for exchanging data
+between flight controllers and external applications.
+
+Using a standardized protocol also simplifies future integration with
+configuration software and debugging tools.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Structured communication
+
+• Small packet overhead
+
+• Easy expansion
+
+• Industry familiarity
+
+Disadvantages
+
+• Command parser required
+
+• Additional packet validation
+
+The protocol complexity is small compared with the flexibility it
+provides.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+Communication protocols should be designed around interfaces rather than
+debugging convenience.
+
+Structured packets remain useful long after development has finished.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"Why not simply use printf() for debugging?"
+
+Answer
+
+"Text output is intended for humans, whereas structured protocols are
+intended for software. MSP enables reliable communication, command-based
+interaction, and future integration with external tools."
+
+================================================================================
+17. RC FAILSAFE DESIGN
+================================================================================
+
+CONTEXT
+
+Radio communication cannot be assumed to remain available throughout an
+entire flight.
+
+Possible failures include
+
+• Receiver power loss
+
+• RF interference
+
+• Transmitter shutdown
+
+• Damaged antennas
+
+• Corrupted serial frames
+
+Ignoring receiver failure could leave the controller operating with stale
+commands, potentially causing uncontrolled flight.
+
+A dedicated safety mechanism therefore became essential.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+The firmware implements an RC failsafe state machine.
+
+The system continuously monitors
+
+• Frame arrival time
+
+• Receiver status flags
+
+• Communication timeout
+
+If valid frames stop arriving for longer than the configured timeout, the
+controller transitions into a predefined failsafe state.
+
+Example
+
+Valid Frames
+
+↓
+
+Normal Flight
+
+↓
+
+Frame Timeout
+
+↓
+
+Failsafe Activated
+
+↓
+
+Controlled Recovery / Motor Shutdown
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+Ignore Signal Loss
+
+Advantages
+
+• Simplest implementation
+
+Disadvantages
+
+• Unsafe
+
+• Aircraft continues using old commands
+
+------------------------------------------------------------
+
+Alternative 2
+
+Immediate Motor Shutdown
+
+Advantages
+
+• Easy implementation
+
+Disadvantages
+
+• Abrupt loss of control
+
+------------------------------------------------------------
+
+Alternative 3
+
+State-Based Failsafe
+
+Advantages
+
+• Predictable behaviour
+
+• Safer recovery
+
+• Expandable
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+A state machine clearly separates normal operation from abnormal
+conditions.
+
+Rather than scattering timeout checks throughout the firmware, all safety
+logic is centralized inside one subsystem.
+
+This makes behaviour easier to understand, validate, and extend.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Improved safety
+
+• Cleaner architecture
+
+• Easier testing
+
+• Predictable behaviour
+
+Disadvantages
+
+• Additional software state
+
+• Slight increase in implementation complexity
+
+Safety-critical software benefits significantly from explicit state
+management.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+Safety mechanisms should not be treated as exceptions.
+
+In embedded control systems they are first-class software components that
+must be designed with the same care as the primary control algorithms.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"What happens if your receiver suddenly stops transmitting?"
+
+Answer
+
+"The firmware continuously monitors receiver timing. If frames are not
+received within the configured timeout, the failsafe state machine takes
+control and transitions the aircraft into a predefined safe state instead
+of continuing to use outdated control commands."
+
+================================================================================
+18. TELEMETRY SYSTEM DESIGN
+================================================================================
+
+CONTEXT
+
+As firmware development progressed, understanding the internal behaviour
+of the flight controller became increasingly difficult.
+
+Initially, debugging relied on simple UART print statements.
+
+Example
+
+printf("Roll = %.2f\n", roll);
+
+Although useful during early development, this approach quickly became
+insufficient.
+
+Large amounts of text slowed execution.
+
+Multiple variables could not be observed simultaneously.
+
+Plotting controller behaviour required manually copying terminal output.
+
+Furthermore, text-based debugging provided little insight into how the
+aircraft behaved over time.
+
+A more structured telemetry system therefore became necessary.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+A dedicated telemetry subsystem was implemented.
+
+Instead of printing arbitrary messages, the firmware periodically
+transmits structured flight information.
+
+Typical telemetry includes
+
+• Roll
+
+• Pitch
+
+• Yaw
+
+• Gyroscope Measurements
+
+• Accelerometer Measurements
+
+• PID Outputs
+
+• Receiver Channels
+
+• Motor Commands
+
+• System Status
+
+The telemetry task executes independently from the control loop, ensuring
+that debugging information does not interfere with flight control timing.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+UART printf()
+
+Advantages
+
+• Extremely simple
+
+• Easy implementation
+
+Disadvantages
+
+• Difficult visualization
+
+• Large communication overhead
+
+• Not suitable for real-time analysis
+
+------------------------------------------------------------
+
+Alternative 2
+
+Structured Telemetry Packets
+
+Advantages
+
+• Machine readable
+
+• Easy visualization
+
+• Lower bandwidth
+
+• Better scalability
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+Separating telemetry from debugging significantly improves firmware
+organization.
+
+The controller simply publishes its current state.
+
+External tools become responsible for visualization.
+
+This approach allows multiple visualization tools to be developed without
+changing the embedded firmware.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Clean architecture
+
+• Lower communication overhead
+
+• Real-time monitoring
+
+• Easier debugging
+
+Disadvantages
+
+• Packet formatting required
+
+• Visualization software required
+
+The additional implementation effort is justified by dramatically
+improved debugging capability.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+Telemetry should expose system state rather than implementation details.
+
+Well-designed telemetry allows engineers to understand firmware behaviour
+without modifying application code.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"Why create a telemetry system instead of printing variables?"
+
+Answer
+
+"Telemetry separates data acquisition from visualization. The firmware
+publishes structured flight data while external software handles
+display and analysis, resulting in lower overhead and better
+maintainability."
+
+================================================================================
+19. ERROR HANDLING PHILOSOPHY
+================================================================================
+
+CONTEXT
+
+Embedded software operates in environments where hardware failures,
+communication errors, and unexpected conditions are inevitable.
+
+Examples include
+
+• SPI communication failure
+
+• Invalid SBUS frames
+
+• Sensor initialization failure
+
+• Timing overruns
+
+• Memory corruption
+
+Ignoring these situations often causes unpredictable behaviour that is
+extremely difficult to debug.
+
+Therefore, the firmware required a consistent strategy for handling
+unexpected events.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+The firmware adopts a fail-safe error handling philosophy.
+
+Whenever an abnormal condition is detected,
+
+the subsystem reports the error,
+
+prevents invalid data from propagating,
+
+and transitions into a safe operating state whenever possible.
+
+Rather than assuming hardware always behaves correctly, every critical
+operation performs basic validation before continuing execution.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+Ignore Errors
+
+Advantages
+
+• Minimal code
+
+Disadvantages
+
+• Unpredictable behaviour
+
+• Difficult debugging
+
+• Unsafe operation
+
+------------------------------------------------------------
+
+Alternative 2
+
+Fail-Safe Error Handling
+
+Advantages
+
+• Predictable behaviour
+
+• Easier diagnosis
+
+• Improved robustness
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+Reliable embedded systems must expect failures rather than treating them
+as exceptional events.
+
+Detecting problems early prevents corrupted data from affecting higher
+layers of the application.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Greater robustness
+
+• Improved debugging
+
+• Safer firmware
+
+Disadvantages
+
+• Slightly larger codebase
+
+• Additional validation logic
+
+The increase in software size is negligible compared to the improvement
+in reliability.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+A reliable embedded system is not one that never encounters errors.
+
+It is one that continues behaving predictably after an error occurs.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"How does your firmware handle unexpected failures?"
+
+Answer
+
+"Critical subsystems validate inputs before use. Invalid data is rejected,
+errors are isolated to the responsible module, and the controller
+transitions into safe operating states whenever necessary."
+
+================================================================================
+20. SOFTWARE TESTING STRATEGY
+================================================================================
+
+CONTEXT
+
+Developing embedded firmware without systematic testing makes regression
+bugs almost inevitable.
+
+Early in development,
+
+new features were verified manually.
+
+Although this approach worked for simple prototypes, every architectural
+change required repeating previous tests.
+
+As the number of modules increased,
+
+manual verification became increasingly time-consuming.
+
+A structured testing methodology became essential.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+Testing was performed incrementally.
+
+Each subsystem was validated independently before integration.
+
+Typical testing sequence
+
+Hardware Driver
+
+↓
+
+Sensor Processing
+
+↓
+
+Attitude Estimation
+
+↓
+
+PID Controller
+
+↓
+
+Motor Mixer
+
+↓
+
+Communication
+
+↓
+
+Failsafe
+
+↓
+
+Complete Flight Pipeline
+
+Where possible, individual software modules were tested in isolation
+before connecting them to the remaining firmware.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+System-Level Testing Only
+
+Advantages
+
+• Fast initial development
+
+Disadvantages
+
+• Difficult debugging
+
+• Fault isolation difficult
+
+------------------------------------------------------------
+
+Alternative 2
+
+Incremental Module Testing
+
+Advantages
+
+• Easier debugging
+
+• Better regression detection
+
+• Improved software quality
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+Testing small modules independently greatly simplifies debugging.
+
+When a failure occurs,
+
+the responsible subsystem can usually be identified immediately.
+
+This significantly reduces development time compared with debugging an
+entire integrated application.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Faster debugging
+
+• Higher confidence
+
+• Better maintainability
+
+• Easier future development
+
+Disadvantages
+
+• Additional testing effort
+
+• More engineering discipline required
+
+Although testing requires additional work during development, it
+dramatically reduces integration problems later.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+Testing is most effective when performed continuously throughout
+development rather than postponed until the software appears complete.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"How did you verify that each subsystem worked correctly?"
+
+Answer
+
+"Every major module was validated independently before system
+integration. This reduced debugging complexity because failures could be
+isolated to one subsystem rather than the entire flight controller."
+
+================================================================================
+21. DESIGNING FOR FUTURE EXTENSIONS
+================================================================================
+
+CONTEXT
+
+The primary objective of this project was to develop a reliable
+bare-metal flight controller capable of stabilizing a multirotor.
+
+However,
+
+modern autopilot systems include significantly more functionality,
+
+including
+
+• GPS Navigation
+
+• Magnetometers
+
+• Barometers
+
+• Optical Flow
+
+• Mission Planning
+
+• Autonomous Flight
+
+Designing the firmware only for its current feature set would eventually
+limit future development.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+The software architecture intentionally avoids assumptions about the
+available sensors or supported flight modes.
+
+Future expansion can occur by introducing additional modules rather than
+rewriting existing ones.
+
+Planned architecture
+
+IMU
+
+↓
+
+Sensor Fusion
+
+↓
+
+State Estimation
+
+↓
+
+Navigation
+
+↓
+
+Flight Modes
+
+↓
+
+Controllers
+
+↓
+
+Motor Mixer
+
+The modular design allows new functionality to be integrated while
+keeping existing interfaces largely unchanged.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+Design Only For Current Features
+
+Advantages
+
+• Smaller codebase
+
+Disadvantages
+
+• Difficult future expansion
+
+------------------------------------------------------------
+
+Alternative 2
+
+Design For Extensibility
+
+Advantages
+
+• Easier maintenance
+
+• Supports future sensors
+
+• Better architecture
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+Good software architecture anticipates future growth.
+
+Adding GPS or autonomous flight should require implementing new modules
+rather than redesigning the entire firmware.
+
+This philosophy encourages long-term maintainability.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Scalable architecture
+
+• Cleaner interfaces
+
+• Easier experimentation
+
+Disadvantages
+
+• Slightly more abstraction
+
+• More planning required
+
+The modest increase in architectural complexity provides significant
+long-term benefits.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+Well-designed embedded software is rarely optimized only for today's
+requirements.
+
+Instead, it is structured so that tomorrow's features can be added with
+minimal disruption to existing code.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"How would you add GPS support to your flight controller?"
+
+Answer
+
+"Because the firmware is modular, GPS would be implemented as an
+independent sensor module feeding the state estimation layer. Existing
+control algorithms would continue using the same interfaces without major
+architectural changes."
+
+================================================================================
+22. SOFTWARE PROJECT STRUCTURE
+================================================================================
+
+CONTEXT
+
+As the firmware evolved beyond a simple proof-of-concept, the number of
+source files increased rapidly.
+
+Initially,
+
+sensor drivers,
+
+controllers,
+
+communication routines,
+
+and application logic
+
+were developed together.
+
+Although this accelerated early development, the project eventually became
+difficult to navigate.
+
+Finding related code required searching across multiple files.
+
+Adding new features often resulted in unrelated modules being modified.
+
+This reduced maintainability and increased the likelihood of introducing
+regression bugs.
+
+A structured project organization therefore became necessary.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+The project was organized into independent software modules according to
+engineering responsibility rather than implementation order.
+
+Example project organization
+
+```
+flight-controller/
+
+│
+
+├── application/
+
+├── drivers/
+
+├── hal/
+
+├── scheduler/
+
+├── estimation/
+
+├── control/
+
+├── communication/
+
+├── safety/
+
+├── telemetry/
+
+├── simulation/
+
+├── tests/
+
+├── docs/
+
+└── tools/
+```
+
+Each directory owns one subsystem.
+
+Source files inside a directory solve closely related engineering
+problems.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+Organize Files By Development Order
+
+Advantages
+
+• Fast initial development
+
+Disadvantages
+
+• Difficult navigation
+
+• Poor scalability
+
+• High coupling
+
+------------------------------------------------------------
+
+Alternative 2
+
+Organize By Software Responsibility
+
+Advantages
+
+• Modular
+
+• Easy navigation
+
+• Better maintenance
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+Software architecture should communicate engineering intent.
+
+Grouping files according to subsystem responsibility allows developers to
+understand the overall firmware without reading every source file.
+
+It also simplifies debugging because related functionality is physically
+located together.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Improved readability
+
+• Better scalability
+
+• Easier onboarding
+
+• Cleaner software architecture
+
+Disadvantages
+
+• Slightly more directories
+
+• Requires consistent organization
+
+The improved maintainability greatly outweighs the additional project
+structure.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+Project structure is itself a form of documentation.
+
+A well-organized repository allows engineers to understand the software
+architecture before reading a single line of code.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"Why did you organize the project into separate modules?"
+
+Answer
+
+"Each directory represents one engineering responsibility. This reduces
+coupling, simplifies debugging, and makes future extensions easier without
+changing unrelated components."
+
+================================================================================
+23. PERFORMANCE OPTIMIZATION
+================================================================================
+
+CONTEXT
+
+Flight controllers operate under strict real-time constraints.
+
+Every control cycle has a limited execution budget.
+
+For example,
+
+if the control loop executes at 1 kHz,
+
+the firmware has approximately
+
+1 millisecond
+
+to complete
+
+• Sensor Reading
+
+• Sensor Fusion
+
+• PID Control
+
+• Motor Mixing
+
+• Communication
+
+• Safety Checks
+
+Missing this deadline reduces controller performance and may destabilize
+the aircraft.
+
+Performance therefore became an architectural consideration rather than a
+late optimization step.
+
+================================================================================
+DESIGN DECISION
+================================================================================
+
+Performance improvements focused primarily on reducing unnecessary work
+instead of introducing complex optimization techniques.
+
+Examples include
+
+• Burst SPI transfers
+
+• Fixed-size buffers
+
+• Efficient scheduling
+
+• Avoiding blocking delays
+
+• Reusing computed values
+
+• Minimizing dynamic calculations inside the control loop
+
+Rather than optimizing isolated functions, the entire control pipeline was
+designed to minimize execution latency.
+
+================================================================================
+ALTERNATIVES CONSIDERED
+================================================================================
+
+Alternative 1
+
+Optimize After Development
+
+Advantages
+
+• Faster prototyping
+
+Disadvantages
+
+• Hidden bottlenecks
+
+• Difficult redesign
+
+------------------------------------------------------------
+
+Alternative 2
+
+Performance-Aware Architecture
+
+Advantages
+
+• Predictable timing
+
+• Lower latency
+
+• Better scalability
+
+Chosen.
+
+================================================================================
+WHY THIS DESIGN WAS CHOSEN
+================================================================================
+
+Most embedded performance problems originate from inefficient software
+architecture rather than slow processors.
+
+Reducing unnecessary hardware transactions and eliminating blocking
+operations often provides larger improvements than low-level code
+optimization.
+
+================================================================================
+TRADE-OFFS
+================================================================================
+
+Advantages
+
+• Faster execution
+
+• Deterministic timing
+
+• Improved responsiveness
+
+Disadvantages
+
+• Requires additional planning
+
+Performance-aware design increases development effort but produces
+significantly more reliable real-time behaviour.
+
+================================================================================
+ENGINEERING INSIGHT
+================================================================================
+
+The fastest code is often the code that never executes.
+
+Good embedded optimization begins by eliminating unnecessary work rather
+than making existing work execute slightly faster.
+
+================================================================================
+INTERVIEW DISCUSSION
+================================================================================
+
+Interview Question
+
+"How did you optimize firmware performance?"
+
+Answer
+
+"I focused on architectural optimizations such as reducing hardware
+transactions, using burst SPI transfers, minimizing blocking operations,
+and scheduling tasks efficiently rather than relying on micro-level code
+optimizations."
+
+================================================================================
+24. ENGINEERING LESSONS LEARNED
+================================================================================
+
+Throughout development, several important engineering principles became
+clear.
+
+Initially,
+
+many problems appeared to be algorithmic.
+
+In reality,
+
+most challenges involved software architecture.
+
+Some of the most valuable lessons include
+
+1.
+
+Deterministic timing is often more important than raw processing speed.
+
+------------------------------------------------------------
+
+2.
+
+Modular software architecture greatly simplifies debugging and future
+development.
+
+------------------------------------------------------------
+
+3.
+
+Reliable sensor data is more valuable than complicated estimation
+algorithms operating on poor measurements.
+
+------------------------------------------------------------
+
+4.
+
+Safety mechanisms should be designed alongside primary functionality
+rather than added later.
+
+------------------------------------------------------------
+
+5.
+
+Communication protocols deserve the same engineering attention as control
+algorithms.
+
+------------------------------------------------------------
+
+6.
+
+Simulation dramatically reduces development time by allowing algorithms to
+be validated before hardware testing.
+
+------------------------------------------------------------
+
+7.
+
+Small, well-defined modules are easier to understand, test, and maintain
+than large monolithic implementations.
+
+------------------------------------------------------------
+
+8.
+
+Testing individual subsystems continuously is significantly more effective
+than validating the complete firmware only after development finishes.
+
+------------------------------------------------------------
+
+9.
+
+Engineering decisions should always be justified using measurable
+trade-offs rather than personal preference.
+
+------------------------------------------------------------
+
+10.
+
+Understanding *why* an architecture exists is considerably more valuable
+than memorizing how to implement it.
+
+================================================================================
+ENGINEERING PHILOSOPHY
+================================================================================
+
+This project gradually shifted from implementing embedded software to
+engineering embedded systems.
+
+The difference lies in considering
+
+• Timing
+
+• Reliability
+
+• Maintainability
+
+• Scalability
+
+• Safety
+
+as equally important design objectives alongside functionality.
+
+================================================================================
+25. SUMMARY OF CRITICAL DESIGN DECISIONS
+================================================================================
+
+CRITICAL ARCHITECTURAL DECISIONS
+
+• Bare-Metal Firmware
+
+• Layered Software Architecture
+
+• Hardware Abstraction Layer
+
+• Deterministic Cooperative Scheduler
+
+• Cascaded PID Controllers
+
+------------------------------------------------------------
+
+CONTROL SYSTEM DECISIONS
+
+• Mahony Sensor Fusion
+
+• Startup Sensor Calibration
+
+• Integral Windup Protection
+
+• Quad-X Motor Mixer
+
+------------------------------------------------------------
+
+COMMUNICATION DECISIONS
+
+• SPI-Based IMU Interface
+
+• SBUS Receiver
+
+• MSP Protocol
+
+• Structured Telemetry
+
+------------------------------------------------------------
+
+SAFETY DECISIONS
+
+• RC Failsafe State Machine
+
+• Error Validation
+
+• Independent Safety Monitoring
+
+------------------------------------------------------------
+
+SOFTWARE ENGINEERING DECISIONS
+
+• Modular Project Structure
+
+• Incremental Testing
+
+• Performance-Aware Design
+
+• Extensible Architecture
+
+================================================================================
+ENGINEERING IMPACT
+================================================================================
+
+This project demonstrates practical implementation of concepts from
+
+• Embedded Systems
+
+• Real-Time Systems
+
+• Control Systems
+
+• Flight Dynamics
+
+• Sensor Fusion
+
+• Digital Communication
+
+• Software Architecture
+
+• Robotics
+
+Rather than simply stabilizing a quadcopter, the firmware demonstrates
+how multiple embedded subsystems interact to form a complete flight
+control platform.
+
+================================================================================
+KEY TAKEAWAYS
+================================================================================
+
+1.
+
+A flight controller is fundamentally a real-time embedded software
+architecture rather than a collection of independent algorithms.
+
+------------------------------------------------------------
+
+2.
+
+Reliable embedded systems require deterministic execution before advanced
+control algorithms become meaningful.
+
+------------------------------------------------------------
+
+3.
+
+Software architecture determines how easily future functionality can be
+integrated.
+
+------------------------------------------------------------
+
+4.
+
+Well-designed interfaces allow independent development of hardware
+drivers, estimation algorithms, communication protocols, and control
+systems.
+
+------------------------------------------------------------
+
+5.
+
+Engineering decisions should always balance simplicity, reliability,
+performance, and maintainability rather than optimizing a single metric.
+
+================================================================================
+FINAL REFLECTION
+================================================================================
+
+This project began as an attempt to understand quadcopter stabilization
+but gradually evolved into a comprehensive study of embedded firmware
+engineering.
+
+Throughout development, implementing individual algorithms became less
+challenging than integrating them into a deterministic, modular, and
+maintainable software architecture.
+
+Every major subsystem—from sensor drivers and attitude estimation to
+control algorithms, communication protocols, telemetry, and safety
+mechanisms—introduced unique engineering trade-offs that influenced the
+overall system design.
+
+The final firmware demonstrates that reliable flight control depends not
+only on mathematics or control theory, but equally on software
+architecture, timing analysis, modularity, communication, validation, and
+engineering discipline.
+
+More importantly, this project established a strong foundation for future
+development toward advanced capabilities such as GPS navigation, sensor
+fusion with additional sensors, autonomous flight modes, and complete UAV
+autopilot systems.
+
+Rather than representing the end of development, this flight controller
+serves as a scalable platform for continued exploration of modern embedded
+and aerospace software engineering.
