@@ -55,7 +55,7 @@ Primary references:
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/flight-controller-bare-metal.git
+git clone https://github.com/RudraBishwakarma/flight-controller-bare_metal
 cd flight-controller-bare-metal
 
 # Build firmware and run all tests (UCRT64 / Git Bash / Linux)
