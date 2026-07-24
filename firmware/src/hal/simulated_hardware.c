@@ -56,12 +56,6 @@ uint32_t simulated_micros(void) {
     return sim_micros;
 }
 
-// Call this periodically to advance simulated time
-void simulated_time_tick(uint32_t delta_ms) {
-    sim_millis += delta_ms;
-    sim_micros += delta_ms * 1000;
-}
-
 
 // ==========================================
 // IMU FUNCTIONS

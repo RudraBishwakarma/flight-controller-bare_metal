@@ -98,7 +98,7 @@ static AngleController angle_ctrl;
 
 // Communication
 static SBUSData sbus;
-static uint8_t msp_response[128];
+static uint8_t msp_response[128] __attribute__((unused));
 
 // Safety
 static RCFailsafe failsafe;
