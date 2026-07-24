@@ -43,37 +43,66 @@ Primary references:
 
 ---
 
-## Quick Verification
+## 🚀 Quick Start
 
 ### Prerequisites
 
-```bash
-make
-arm-none-eabi-gcc
-python 3.x
-```
+- **GCC** (for PC simulation/testing)
+- **Python 3.x** with `numpy` and `matplotlib` (for telemetry viewer)
+- **ARM GCC toolchain** `arm-none-eabi-gcc` (only for STM32 hardware)
 
 ### Build Firmware
 
 ```bash
-make
+# Clone the repository
+git clone https://github.com/YOUR_USERNAME/flight-controller-bare-metal.git
+cd flight-controller-bare-metal
+
+# Build firmware and run all tests (UCRT64 / Git Bash / Linux)
+./scripts/build_all.sh
+
+```
+### Run Unit Tests
+```bash
+# Run all 9 test suites (63 individual tests)
+./scripts/run_tests.sh
+
+```
+
+### Run Flight Controller (Simulation)
+```bash
+# Run the firmware directly (QEMU target)
+./build/qemu/flight_controller
+
 ```
 
 ### Run Unit Tests
-
 ```bash
-python tests/run_all.py
+# Run all 9 test suites (63 individual tests)
+./scripts/run_tests.sh
+
 ```
 
-### Run Flight Simulation
-
+### Run Telemetry Viewer
 ```bash
-python simulation/main.py
+# Windows CMD:
+python telemetry_viewer/viewer.py
+
+# Linux/Mac:
+python3 telemetry_viewer/viewer.py
+
 ```
 
-Expected output
+### Run Python Simulation
+```bash
+# Windows CMD:
+python simulation/run_simulation.py
+
+# Linux/Mac:
+python3 simulation/run_simulation.py
 
 ```
+Expected output 
 Initializing Flight Controller...
 
 MPU6000 Initialized
