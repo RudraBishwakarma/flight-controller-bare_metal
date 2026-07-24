@@ -4,21 +4,19 @@
 # FLIGHT CONTROLLER — BUILD ALL SCRIPT
 # ==========================================
 
-set -e  # Exit on any error
+set -e
 
-# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}  FLIGHT CONTROLLER — BUILD SYSTEM      ${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
-# Detect target
 if [ "$1" == "qemu" ] || [ "$1" == "" ]; then
     TARGET="qemu"
     TARGET_FLAG="-DTARGET_QEMU=1"
@@ -33,13 +31,8 @@ else
     exit 1
 fi
 
-# Create build directory
 BUILD_DIR="build/${TARGET}"
 mkdir -p ${BUILD_DIR}
-
-# ==========================================
-# COMPILE FIRMWARE
-# ==========================================
 
 echo ""
 echo -e "${YELLOW}[BUILD]${NC} Compiling flight controller firmware..."
@@ -52,6 +45,7 @@ FIRMWARE_SOURCES=(
     "firmware/src/hal/hal_uart.c"
     "firmware/src/hal/hal_tim.c"
     "firmware/src/hal/hal_adc.c"
+    "firmware/src/hal/simulated_hardware.c"
     "firmware/src/estimation/mahony_filter.c"
     "firmware/src/control/pid.c"
     "firmware/src/control/rate_controller.c"
@@ -64,12 +58,9 @@ FIRMWARE_SOURCES=(
     "firmware/src/utils/circular_buffer.c"
 )
 
-# ==========================================
-# INCLUDE DIRECTORIES
-# ==========================================
-
 INCLUDE_DIRS=(
     "-Ifirmware"
+    "-Ifirmware/config"
     "-Ifirmware/src"
     "-Ifirmware/src/system"
     "-Ifirmware/src/hal"
@@ -80,7 +71,7 @@ INCLUDE_DIRS=(
     "-Ifirmware/src/failsafe"
     "-Ifirmware/src/utils"
 )
-# Compile
+
 gcc -o ${BUILD_DIR}/flight_controller \
     "${FIRMWARE_SOURCES[@]}" \
     "${INCLUDE_DIRS[@]}" \
@@ -95,14 +86,9 @@ else
     exit 1
 fi
 
-# ==========================================
-# BUILD UNIT TESTS
-# ==========================================
-
 echo ""
 echo -e "${YELLOW}[BUILD]${NC} Building unit tests..."
 
-# Test executables
 TESTS=(
     "test_pid:firmware/src/control/pid.c tests/test_pid.c -Ifirmware/src/control -lm"
     "test_mixer:firmware/src/control/mixer.c tests/test_mixer.c -Ifirmware/src/control -lm"
@@ -119,14 +105,10 @@ TEST_PASSED=0
 TEST_FAILED=0
 
 for test_info in "${TESTS[@]}"; do
-    # Parse test info
     TEST_NAME="${test_info%%:*}"
     TEST_SOURCES="${test_info#*:}"
-    
     echo -e "  Building ${TEST_NAME}..."
-    
     gcc -o ${BUILD_DIR}/${TEST_NAME} ${TEST_SOURCES} -Wall -Wextra -O2
-    
     if [ $? -eq 0 ]; then
         echo -e "    ${GREEN}✓ Built${NC}"
     else
@@ -134,17 +116,12 @@ for test_info in "${TESTS[@]}"; do
     fi
 done
 
-# ==========================================
-# RUN ALL TESTS
-# ==========================================
-
 echo ""
 echo -e "${YELLOW}[TEST]${NC} Running unit tests..."
 echo ""
 
 for test_info in "${TESTS[@]}"; do
     TEST_NAME="${test_info%%:*}"
-    
     if [ -f "${BUILD_DIR}/${TEST_NAME}" ]; then
         echo -e "${BLUE}─── ${TEST_NAME} ───${NC}"
         if ${BUILD_DIR}/${TEST_NAME}; then
@@ -157,10 +134,6 @@ for test_info in "${TESTS[@]}"; do
         echo ""
     fi
 done
-
-# ==========================================
-# SUMMARY
-# ==========================================
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}  BUILD SUMMARY                          ${NC}"
